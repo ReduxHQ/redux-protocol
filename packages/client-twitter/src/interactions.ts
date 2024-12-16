@@ -18,7 +18,11 @@ import {
 } from "@ai16z/eliza";
 import { ClientBase } from "./base";
 import { buildConversationThread, sendTweet, wait } from "./utils.ts";
-import { startTweetReviewEngine } from "../../redux-extensions/src/index";
+import {
+    logQueries,
+    startTweetReviewEngine,
+} from "../../redux-extensions/src/index";
+import { Log } from "../../redux-extensions/src/db/schema.ts";
 
 export const twitterMessageHandlerTemplate =
     `
@@ -99,8 +103,9 @@ export class TwitterInteractionClient {
             this.handleTwitterInteractions();
             setTimeout(
                 handleTwitterInteractionsLoop,
-                Number(this.runtime.getSetting("TWITTER_POLL_INTERVAL") || 12) *
-                    1000 // Default to 2 minutes
+                Number(
+                    this.runtime.getSetting("TWITTER_POLL_INTERVAL") || 240
+                ) * 1000 // Default to 4 minutes
             );
         };
         handleTwitterInteractionsLoop();
@@ -203,6 +208,20 @@ export class TwitterInteractionClient {
             elizaLogger.log("Finished checking Twitter interactions");
         } catch (error) {
             elizaLogger.error("Error handling Twitter interactions:", error);
+            const errorLog: Log = {
+                id: stringToUuid(
+                    this.runtime.agentId + "-" + this.runtime.agentId
+                ),
+                createdAt: new Date(),
+                userId: this.runtime.agentId,
+                body: {
+                    message: "Error handling Twitter interactions",
+                    error: error,
+                },
+                type: "error",
+                roomId: this.runtime.agentId,
+            };
+            await logQueries.saveLog(errorLog);
         }
     }
 
@@ -320,7 +339,7 @@ export class TwitterInteractionClient {
         const shouldRespond = await generateShouldRespond({
             runtime: this.runtime,
             context: shouldRespondContext,
-            modelClass: ModelClass.MEDIUM,
+            modelClass: ModelClass.LARGE,
         });
 
         // Promise<"RESPOND" | "IGNORE" | "STOP" | null> {
@@ -343,7 +362,7 @@ export class TwitterInteractionClient {
         const response = await generateMessageResponse({
             runtime: this.runtime,
             context,
-            modelClass: ModelClass.MEDIUM,
+            modelClass: ModelClass.LARGE,
         });
 
         const removeQuotes = (str: string) =>

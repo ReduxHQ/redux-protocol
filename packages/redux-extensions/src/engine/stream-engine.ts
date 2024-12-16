@@ -9,6 +9,10 @@ import { STREAM_PROMPTS } from "./prompts";
 import { streamQueries } from "../db/queries";
 import { uploadImage } from "../storage/cdn";
 import { ConsciousnessStream } from "../db/schema";
+import {
+    generateTrendingConnections,
+    VitruvianStreamSchema,
+} from "./trending-searches";
 
 const PaintingStreamSchema = z.object({
     content: z.object({
@@ -113,6 +117,9 @@ const schemas = {
     GALLERY: GalleryStreamSchema,
     SKETCH: SketchStreamSchema,
     PAINTING: PaintingStreamSchema,
+    ANATOMY: z.object({
+        content: VitruvianStreamSchema,
+    }),
 };
 
 async function fetchAPOD() {
@@ -216,6 +223,13 @@ export async function generateStream(
             });
 
             streamEvent.content.apod = apodData;
+        } else if (topic === "ANATOMY") {
+            // Get trending data using existing function
+            const trendingData = await generateTrendingConnections();
+
+            streamEvent = {
+                content: trendingData.content,
+            };
         } else {
             streamEvent = await client.chat.completions.create({
                 messages: [

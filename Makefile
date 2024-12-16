@@ -1,11 +1,8 @@
-export PATH := $(HOME)/.npm-global/bin:$(HOME)/.nvm/versions/node/$(shell node -v)/bin:/usr/local/bin:$(PATH)
 
-# HELP DOCS
-# make copy
-# make rebuild
-# make restart-caddy
-# make restart-server
 
+server_ip := 178.156.153.83  # your server ip
+git_email := $(GIT_EMAIL)
+git_name := $(GIT_NAME)
 
 help:
 	@echo "make copy"
@@ -30,27 +27,20 @@ build_es: # build eliza-server
 
 
 add-git-config: # add git config
-	git config --global user.email "resurgohldr@gmail.com"
-	git config --global user.name "resurgox"
-
-
-add-remote: # add remote
-	git remote set-url base git@github.com:resurgox/elizaredux.git
+	git config --global user.email $(git_email)
+	git config --global user.name $(git_name)
 
 test-ssh: # test ssh
 	ssh -T git@github.com
 
 push: # push to remote
-	git push -u eliza main-eliza
-
-restart-caddy: # restart caddy
-	ssh root@178.156.153.83 "sudo systemctl restart caddy"
+	git push -u redux develop
 
 copy-to-server: # copy to server
 	./scripts/copy.sh
 
 restart-caddy: # restart caddy
-	ssh root@178.156.153.83 "cd /app && caddy reload"
+	ssh root@$(server_ip) "cd /app && caddy reload"
 
 restart-server: # restart server
-	ssh root@178.156.153.83 "cd /app && make rebuild"
+	ssh root@$(server_ip) "cd /app && make rebuild"

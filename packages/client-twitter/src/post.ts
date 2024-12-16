@@ -7,6 +7,7 @@ import {
     ModelClass,
     stringToUuid,
     parseBooleanFromText,
+    ModelProviderName,
 } from "@ai16z/eliza";
 import { elizaLogger } from "@ai16z/eliza";
 import { ClientBase } from "./base.ts";
@@ -15,13 +16,14 @@ import {
     logQueries,
     tweetQueries,
 } from "../../redux-extensions/src/db/queries";
-import { db } from "../../redux-extensions/src/db/index.ts";
-import { tweets, Tweet as DBTweet } from "../../redux-extensions/src/db/schema";
+import { Tweet as DBTweet } from "../../redux-extensions/src/db/schema";
+import { promptQueries } from "../../redux-extensions/src/db/queries";
 import { getNextTweetType } from "../../redux-extensions/src/twitter-extensions/weight-manager.ts";
 import { generateMediaTweet } from "../../redux-extensions/src/engine/media-generation.ts";
 import { urlToImage } from "../../redux-extensions/src/storage/cdn.ts";
 import {
     twitterPostTemplate,
+    twitterPostTemplateImg,
     twitterPostTemplateV1,
 } from "../../redux-extensions/src/twitter-extensions/prompts.ts";
 
@@ -79,7 +81,7 @@ export class TwitterPostClient {
         const maxMinutes =
             parseInt(this.runtime.getSetting("POST_INTERVAL_MAX")) || 24;
         const randomMinutes =
-            Math.floor(Math.random() * (maxMinutes - minMinutes + 1)) +
+            Math.floor(Math.random() * (maxMinutes - minMinutes + 120)) +
             minMinutes;
         const futureDate = new Date(
             lastPostTimestamp.getTime() + randomMinutes * 60 * 1000
@@ -234,10 +236,10 @@ export class TwitterPostClient {
                 await agentSettingQueries.updateAgentSetting(
                     this.runtime.agentId,
                     "tweet_interval",
-                    "15"
+                    "30"
                 );
             }
-            return parseInt(result ?? "15") * 60 * 1000;
+            return parseInt(result ?? "30") * 60 * 1000;
         } catch (error) {
             elizaLogger.error("Error getting post interval:", error);
             return 15 * 60 * 1000;
@@ -420,6 +422,30 @@ export class TwitterPostClient {
         return tweet;
     }
 
+    async getPrompt(tweetType: string) {
+        // template type
+        const promptKey =
+            tweetType === "image/jpeg"
+                ? "twitter_post_template_img"
+                : "twitter_post_template";
+        let prompt =
+            tweetType === "image/jpeg"
+                ? twitterPostTemplateImg
+                : twitterPostTemplateV1;
+        try {
+            const dbTemplate = await promptQueries.getPrompt(
+                this.runtime.agentId,
+                promptKey
+            );
+            if (dbTemplate) {
+                prompt = dbTemplate.prompt;
+            }
+        } catch (error) {
+            elizaLogger.error("Error getting db template:", error);
+        }
+        return prompt;
+    }
+
     private async generateNewTweet() {
         elizaLogger.log("Generating new tweet");
 
@@ -477,48 +503,30 @@ export class TwitterPostClient {
                     return `#${tweet.id}\n${tweet.content}\n---\n`;
                 })
                 .join("\n");
-            const templates = {
-                v1: twitterPostTemplateV1,
-                v0: twitterPostTemplate,
-            };
+
             state.recentTweets = `\nHere are your recent tweets:\n${recentSentTweetsText}`;
+
+            const tweetType = await getNextTweetType();
+            const prompt = await this.getPrompt(tweetType);
 
             const context = composeContext({
                 state,
-                template:
-                    this.runtime.character.templates?.twitterPostTemplate ||
-                    templates.v1,
+                template: prompt,
             });
             elizaLogger.log("Context composed. Now generating tweet.");
             elizaLogger.debug("generate post prompt:\n" + context);
 
-            const taskTemplate = `
-            # Task: Generate a post in the authentic voice of Leonardo da Vinci.
-            Write a 1-2 sentence post that is {{adjective}} about {{topic}}, drawing from my centuries of observation and insight.
-            {{postStyle}}. Brief, concise statements only. The total character count MUST be less than 280. No emojis. Use \\n\\n (double spaces) between statements.`;
-
-            const mediaTemplate = `
-            # Task: Generate a post and an image in the authentic voice of Leonardo da Vinci.
-            Write a 1 sentence post that is {{adjective}} about {{topic}}, drawing from my centuries of observation and insight.
-            {{postStyle}}. The text should be relevant to the image.`;
-
-            const textPrompt = context + taskTemplate;
-            const mediaPrompt = context + mediaTemplate;
-
-            const tweetType = await getNextTweetType();
-            elizaLogger.log(`Tweet type: ${tweetType}`);
-
             let newTweetContent = "";
             let mediaUrl = null;
             if (tweetType === "image/jpeg") {
-                const mediaTweet = await generateMediaTweet(mediaPrompt);
+                const mediaTweet = await generateMediaTweet(context);
                 newTweetContent = mediaTweet.tweetText;
                 mediaUrl = mediaTweet.url;
             } else {
                 newTweetContent = await generateText({
                     runtime: this.runtime,
-                    context: textPrompt,
-                    modelClass: ModelClass.SMALL,
+                    context: context,
+                    modelClass: ModelClass.LARGE,
                 });
             }
 

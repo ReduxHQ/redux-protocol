@@ -28,6 +28,13 @@ const TweetReviewSchema = z.object({
         .optional()
         .nullable()
         .describe("Suggested improvements if needed"),
+    evalLog: z
+        .string()
+        .optional()
+        .nullable()
+        .describe(
+            "Evaluation log, include a short summary evaluation to improve prompts in the future."
+        ),
     newTweet: z
         .string()
         .optional()
@@ -43,7 +50,7 @@ export async function reviewTweet(
     recentTweetsText: string
 ) {
     const oai = new OpenAI({
-        apiKey: runtime.token,
+        apiKey: process.env.OPENAI_API_KEY,
     });
     const reviewPrompt = REVIEW_PROMPT.replace("{tweet}", tweet).replace(
         "{recentTweets}",

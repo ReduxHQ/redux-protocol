@@ -21,10 +21,12 @@ import {
     consciousnessStreams,
     authMiddleware,
 } from "../../redux-extensions/src/index";
+import { generateTrendingConnections } from "../../redux-extensions/src/engine/trending-searches";
 import { db } from "../../redux-extensions/src/index";
 import {
     tweetQueries,
     streamQueries,
+    promptQueries,
 } from "../../redux-extensions/src/db/queries";
 
 import * as fs from "fs";
@@ -409,6 +411,37 @@ export function createApiRouter(agents: Map<string, AgentRuntime>) {
         const offset = parseInt(req.query.offset as string) || 0;
         const tweets = await tweetQueries.getTweets(limit, offset);
         res.json(tweets);
+    });
+
+    // prompts
+    router.get("/prompts", async (req, res) => {
+        const prompts = await promptQueries.getPrompts();
+        res.json(prompts);
+    });
+
+    router.post("/prompts/:id", async (req, res) => {
+        const id = req.params.id;
+        const settings = req.body;
+        const prompt = await promptQueries.updatePrompt(id, settings);
+        res.json(prompt);
+    });
+
+    router.post("/prompts", async (req, res) => {
+        const settings = req.body;
+        const prompt = await promptQueries.createPrompt(settings);
+        res.json(prompt);
+    });
+
+    router.delete("/prompts/:id", async (req, res) => {
+        const id = req.params.id;
+        await promptQueries.deletePrompt(id);
+        res.json({ message: "Prompt deleted" });
+    });
+
+    // trending searches endpoint
+    router.get("/trending-searches", async (req, res) => {
+        const connections = await generateTrendingConnections();
+        res.json(connections);
     });
 
     return router;
