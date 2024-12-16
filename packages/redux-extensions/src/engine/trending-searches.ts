@@ -28,6 +28,7 @@ const ConnectionSchema = z.object({
 });
 
 const TrendingConnectionsSchema = z.object({
+    title: z.string().describe("A short title summarizing all the connections"),
     connections: z
         .array(ConnectionSchema)
         .describe("An array of meaningful connections between trending topics"),
@@ -35,6 +36,9 @@ const TrendingConnectionsSchema = z.object({
 
 export const VitruvianStreamSchema = z.object({
     content: z.object({
+        title: z
+            .string()
+            .describe("A short title summarizing all the connections"),
         nodes: z.array(
             z.object({
                 query: z.string(),
@@ -146,7 +150,7 @@ async function fetchTrendingSearches(): Promise<
 }
 
 export async function generateSimpleTrendingConnections(): Promise<
-    Array<z.infer<typeof ConnectionSchema>>
+    z.infer<typeof TrendingConnectionsSchema>
 > {
     try {
         // Fetch trending searches
@@ -187,7 +191,7 @@ export async function generateSimpleTrendingConnections(): Promise<
         });
 
         elizaLogger.info("Generated trending connections:", result);
-        return result.connections;
+        return result;
     } catch (error) {
         elizaLogger.error("Error generating trending connections:", error);
         throw error;
@@ -301,11 +305,13 @@ export async function generateTrendingConnections(): Promise<
 
     try {
         // Get initial connections
-        const initialConnections = await generateSimpleTrendingConnections();
+        const trendingConnections = await generateSimpleTrendingConnections();
         // connections = initialConnections;
 
         // Enrich and improve connections
-        const enrichedConnections = await enrichConnections(initialConnections);
+        const enrichedConnections = await enrichConnections(
+            trendingConnections.connections
+        );
         const improvedConnections =
             await improveConnections(enrichedConnections);
 
@@ -328,14 +334,9 @@ export async function generateTrendingConnections(): Promise<
                     total_nodes: trendingSearches.length,
                     total_connections: improvedConnections.length,
                 },
+                title: trendingConnections.title,
             },
         };
-
-        // Cache the transformed data
-        // await cacheQueries.set(
-        //     "trending_connections",
-        //     JSON.stringify(vitruvianData)
-        // );
 
         return vitruvianData;
     } catch (error) {
@@ -347,6 +348,7 @@ export async function generateTrendingConnections(): Promise<
         return {
             content: {
                 nodes: [],
+                title: "",
                 connections: [],
                 metadata: {
                     timestamp: new Date().toISOString(),

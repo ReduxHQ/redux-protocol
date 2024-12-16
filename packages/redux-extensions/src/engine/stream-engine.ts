@@ -226,9 +226,13 @@ export async function generateStream(
         } else if (topic === "ANATOMY") {
             // Get trending data using existing function
             const trendingData = await generateTrendingConnections();
+            if (trendingData.content.nodes.length === 0) {
+                throw new Error("No trending data found");
+            }
 
             streamEvent = {
                 content: trendingData.content,
+                title: trendingData.content.title,
             };
         } else {
             streamEvent = await client.chat.completions.create({

@@ -20,6 +20,7 @@ import { eq, desc } from "drizzle-orm";
 import {
     consciousnessStreams,
     authMiddleware,
+    generateStream,
 } from "../../redux-extensions/src/index";
 import { generateTrendingConnections } from "../../redux-extensions/src/engine/trending-searches";
 import { db } from "../../redux-extensions/src/index";
@@ -442,6 +443,35 @@ export function createApiRouter(agents: Map<string, AgentRuntime>) {
     router.get("/trending-searches", async (req, res) => {
         const connections = await generateTrendingConnections();
         res.json(connections);
+    });
+
+    // Add this to the router in createApiRouter function
+    router.post("/:agentId/generateStream", async (req, res) => {
+        const agentId = req.params.agentId;
+        const { topic } = req.body;
+
+        if (!topic) {
+            res.status(400).json({ error: "Topic is required" });
+            return;
+        }
+
+        const runtime = agents.get(agentId);
+        if (!runtime) {
+            res.status(404).json({ error: "Agent not found" });
+            return;
+        }
+
+        try {
+            const stream = await generateStream(runtime, topic);
+            if (!stream) {
+                res.status(500).json({ error: "Failed to generate stream" });
+                return;
+            }
+            res.json(stream);
+        } catch (error) {
+            elizaLogger.error("Error generating stream:", error);
+            res.status(500).json({ error: "Failed to generate stream" });
+        }
     });
 
     return router;
