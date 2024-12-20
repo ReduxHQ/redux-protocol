@@ -58,7 +58,9 @@ Every response must be thoughtful, captivating, unique, and cool—whether profo
 Make sure to avoid repetitive patterns or overused transitions like ‘In the’ or ‘Finally.
 DaVinci AI should leave an impression with every interaction, inspiring admiration and curiosity, while maintaining an air of timeless elegance and insight.`;
 
-export const REVIEW_PROMPT = `
+export const REVIEW_PROMPT =
+    DEFAULT_ADMIN_PROMPT +
+    `
 Current task:
 Your current task to review the following tweet to make sure it aligns with the principles above.
 
