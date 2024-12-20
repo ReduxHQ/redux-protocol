@@ -42,18 +42,11 @@ Note that {{agentName}} is capable of reading/seeing/hearing various forms of me
 # Instructions: Write the next message for {{agentName}}.
 ` + messageCompletionFooter;
 
-export interface SimliClientConfig {
-    apiKey: string;
-    faceID: string;
-    handleSilence: boolean;
-    videoRef: any;
-    audioRef: any;
-}
-
 export class DirectClient {
     public app: express.Application;
-    private agents: Map<string, AgentRuntime>;
+    private agents: Map<string, AgentRuntime>; // container management
     private server: any; // Store server instance
+    public startAgent: Function; // Store startAgent functor
 
     constructor() {
         elizaLogger.log("DirectClient constructor");
@@ -64,7 +57,7 @@ export class DirectClient {
         this.app.use(bodyParser.json());
         this.app.use(bodyParser.urlencoded({ extended: true }));
 
-        const apiRouter = createApiRouter(this.agents);
+        const apiRouter = createApiRouter(this.agents, this);
         this.app.use(apiRouter);
     }
 
@@ -116,6 +109,7 @@ export class DirectClient {
         );
     }
 
+    // agent/src/index.ts:startAgent calls this
     public registerAgent(runtime: AgentRuntime) {
         this.agents.set(runtime.agentId, runtime);
         this.startStreamGeneration(runtime);
@@ -127,7 +121,9 @@ export class DirectClient {
 
     public start(port: number) {
         this.server = this.app.listen(port, () => {
-            elizaLogger.success(`Server running at http://localhost:${port}/`);
+            elizaLogger.success(
+                `REST API bound to 0.0.0.0:${port}. If running locally, access it at http://localhost:${port}.`
+            );
         });
 
         // Handle graceful shutdown
@@ -169,7 +165,7 @@ export const DirectClientInterface: Client = {
         client.start(serverPort);
         return client;
     },
-    stop: async (_runtime: IAgentRuntime, client?: any) => {
+    stop: async (_runtime: IAgentRuntime, client?: Client) => {
         if (client instanceof DirectClient) {
             client.stop();
         }

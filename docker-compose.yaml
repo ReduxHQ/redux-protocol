@@ -1,6 +1,5 @@
 services:
-    eliza:
-        command: ["pnpm", "start"]
+    tee:
         build:
             context: .
             dockerfile: Dockerfile
@@ -26,4 +25,4 @@ services:
 
 volumes:
     postgres:
-    app:
+    tee:

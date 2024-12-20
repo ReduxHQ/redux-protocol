@@ -5,7 +5,6 @@ import { Connection, Keypair, PublicKey } from "@solana/web3.js";
 import { CreateTokenMetadata, PriorityFee, PumpFunSDK } from "pumpdotfun-sdk";
 
 import { getAssociatedTokenAddressSync } from "@solana/spl-token";
-import bs58 from "bs58";
 import {
     settings,
     ActionExample,
@@ -15,7 +14,7 @@ import {
     Memory,
     ModelClass,
     State,
-    generateObjectDEPRECATED,
+    generateObjectDeprecated,
     composeContext,
     type Action,
 } from "@ai16z/eliza";
@@ -241,6 +240,7 @@ const promptConfirmation = async (): Promise<boolean> => {
 // Save the base64 data to a file
 import * as fs from "fs";
 import * as path from "path";
+import { getWalletKey } from "../keypairUtils.ts";
 
 const pumpfunTemplate = `Respond with a JSON markdown block containing only the extracted values. Use null for any values that cannot be determined.
 
@@ -302,7 +302,7 @@ export default {
             template: pumpfunTemplate,
         });
 
-        const content = await generateObjectDEPRECATED({
+        const content = await generateObjectDeprecated({
             runtime,
             context: pumpContext,
             modelClass: ModelClass.LARGE,
@@ -387,11 +387,10 @@ export default {
         const slippage = "2000";
         try {
             // Get private key from settings and create deployer keypair
-            const privateKeyString =
-                runtime.getSetting("SOLANA_PRIVATE_KEY") ??
-                runtime.getSetting("WALLET_PRIVATE_KEY");
-            const secretKey = bs58.decode(privateKeyString);
-            const deployerKeypair = Keypair.fromSecretKey(secretKey);
+            const { keypair: deployerKeypair } = await getWalletKey(
+                runtime,
+                true
+            );
 
             // Generate new mint keypair
             const mintKeypair = Keypair.generate();
@@ -488,13 +487,13 @@ export default {
             {
                 user: "{{user1}}",
                 content: {
-                    text: "Create a new token called GLITCHIZA with symbol GLITCHIZA and generate a description about it. Also come up with a description for it to use for image generation .buy 0.00069 SOL worth.",
+                    text: "Create a new token called GLITCHIZA with symbol GLITCHIZA and generate a description about it on pump.fun. Also come up with a description for it to use for image generation .buy 0.00069 SOL worth.",
                 },
             },
             {
                 user: "{{user2}}",
                 content: {
-                    text: "Token GLITCHIZA (GLITCHIZA) created successfully!\nContract Address: 3kD5DN4bbA3nykb1abjS66VF7cYZkKdirX8bZ6ShJjBB\nCreator: 9jW8FPr6BSSsemWPV22UUCzSqkVdTp6HTyPqeqyuBbCa\nView at: https://pump.fun/EugPwuZ8oUMWsYHeBGERWvELfLGFmA1taDtmY8uMeX6r",
+                    text: "Token GLITCHIZA (GLITCHIZA) created successfully on pump.fun!\nContract Address: 3kD5DN4bbA3nykb1abjS66VF7cYZkKdirX8bZ6ShJjBB\nCreator: 9jW8FPr6BSSsemWPV22UUCzSqkVdTp6HTyPqeqyuBbCa\nView at: https://pump.fun/EugPwuZ8oUMWsYHeBGERWvELfLGFmA1taDtmY8uMeX6r",
                     action: "CREATE_AND_BUY_TOKEN",
                     content: {
                         tokenInfo: {
