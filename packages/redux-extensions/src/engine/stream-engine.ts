@@ -117,9 +117,7 @@ const schemas = {
     GALLERY: GalleryStreamSchema,
     SKETCH: SketchStreamSchema,
     PAINTING: PaintingStreamSchema,
-    ANATOMY: z.object({
-        content: VitruvianStreamSchema,
-    }),
+    WEB_SEARCH: VitruvianStreamSchema,
 };
 
 async function fetchAPOD() {
@@ -223,7 +221,7 @@ export async function generateStream(
             });
 
             streamEvent.content.apod = apodData;
-        } else if (topic === "ANATOMY") {
+        } else if (topic === "WEB_SEARCH") {
             // Get trending data using existing function
             const trendingData = await generateTrendingConnections();
             if (trendingData.content.nodes.length === 0) {
@@ -294,10 +292,9 @@ export async function generateStream(
                 elizaLogger.error("Failed to generate image:", error);
             }
         }
-
         const entry: ConsciousnessStream = {
             id: uuidv4(),
-            topic,
+            topic: topic.replace("_", " "),
             title: `Stream Entry ${new Date().toISOString()}`,
             content: streamEvent,
             status: "ACTIVE",
