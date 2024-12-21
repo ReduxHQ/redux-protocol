@@ -436,16 +436,19 @@ export class TwitterInteractionClient {
                       .join(",")
                 : "";
 
+        const templateRespond =
+            this.runtime.character.templates?.twitterShouldRespondTemplate?.(
+                validTargetUsersStr
+            ) ||
+            this.runtime.character?.templates?.shouldRespondTemplate ||
+            twitterShouldRespondTemplate(validTargetUsersStr);
+
         const shouldRespondContext = composeContext({
             state,
-            template:
-                this.runtime.character.templates?.twitterShouldRespondTemplate?.(
-                    validTargetUsersStr
-                ) ||
-                this.runtime.character?.templates?.shouldRespondTemplate ||
-                twitterShouldRespondTemplate(validTargetUsersStr),
+            template: templateRespond,
         });
 
+        // TODO clean this up move to prompts db for evals
         const shouldRespond = await generateShouldRespond({
             runtime: this.runtime,
             context: shouldRespondContext,
@@ -458,15 +461,24 @@ export class TwitterInteractionClient {
             return { text: "Response Decision:", action: shouldRespond };
         }
 
+        // Add extra instructions for priority users
+        // TODO clean this up move to prompts db for evals
+        const shouldRespondExtraInstructions = targetUsersStr
+            ? `When replying to priority users (${targetUsersStr}), keep responses brief and concise, under 150 characters. ONLY A SINGLE SHORT SENTENCE. THIS IS VERY IMPORTANT!!.`
+            : "";
+        let genericTemplate =
+            this.runtime.character.templates?.twitterMessageHandlerTemplate ||
+            this.runtime.character?.templates?.messageHandlerTemplate ||
+            twitterMessageHandlerTemplate;
+
+        if (targetUsersStr && targetUsersStr.length > 0) {
+            genericTemplate += shouldRespondExtraInstructions;
+        }
+
         const context = composeContext({
             state,
-            template:
-                this.runtime.character.templates
-                    ?.twitterMessageHandlerTemplate ||
-                this.runtime.character?.templates?.messageHandlerTemplate ||
-                twitterMessageHandlerTemplate,
+            template: genericTemplate,
         });
-
         elizaLogger.debug("Interactions prompt:\n" + context);
 
         const response = await generateMessageResponse({
@@ -485,6 +497,33 @@ export class TwitterInteractionClient {
         response.text = removeQuotes(response.text);
 
         if (response.text) {
+            // confirm the response is not too long
+            if (response.text.length > 180) {
+                try {
+                    elizaLogger.warn("Response is too long, skipping");
+                    const log = {
+                        id: stringToUuid(
+                            this.runtime.agentId + "-" + this.runtime.agentId
+                        ),
+                        createdAt: new Date(),
+                        userId: this.runtime.agentId,
+                        body: {
+                            message: "Response is too long, skipping",
+                            tweetId: tweet.id,
+                            response: response.text,
+                        },
+                        type: "error",
+                        roomId: this.runtime.agentId,
+                    };
+                    await logQueries.saveLog(log);
+                } catch (error) {
+                    elizaLogger.error("Error saving log", error);
+                }
+                // return {
+                //     text: "Response is too long, skipping",
+                //     action: "IGNORE",
+                // };
+            }
             try {
                 const callback: HandlerCallback = async (response: Content) => {
                     const memories = await sendTweet(
