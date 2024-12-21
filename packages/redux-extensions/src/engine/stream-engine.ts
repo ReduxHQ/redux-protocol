@@ -9,6 +9,10 @@ import { STREAM_PROMPTS } from "./prompts";
 import { streamQueries } from "../db/queries";
 import { uploadImage } from "../storage/cdn";
 import { ConsciousnessStream } from "../db/schema";
+import {
+    generateTrendingConnections,
+    VitruvianStreamSchema,
+} from "./trending-searches";
 
 const PaintingStreamSchema = z.object({
     content: z.object({
@@ -113,6 +117,7 @@ const schemas = {
     GALLERY: GalleryStreamSchema,
     SKETCH: SketchStreamSchema,
     PAINTING: PaintingStreamSchema,
+    WEB_SEARCH: VitruvianStreamSchema,
 };
 
 async function fetchAPOD() {
@@ -216,6 +221,17 @@ export async function generateStream(
             });
 
             streamEvent.content.apod = apodData;
+        } else if (topic === "WEB_SEARCH") {
+            // Get trending data using existing function
+            const trendingData = await generateTrendingConnections();
+            if (trendingData.content.nodes.length === 0) {
+                throw new Error("No trending data found");
+            }
+
+            streamEvent = {
+                content: trendingData.content,
+                title: trendingData.content.title,
+            };
         } else {
             streamEvent = await client.chat.completions.create({
                 messages: [
@@ -276,10 +292,9 @@ export async function generateStream(
                 elizaLogger.error("Failed to generate image:", error);
             }
         }
-
         const entry: ConsciousnessStream = {
             id: uuidv4(),
-            topic,
+            topic: topic.replace("_", " "),
             title: `Stream Entry ${new Date().toISOString()}`,
             content: streamEvent,
             status: "ACTIVE",

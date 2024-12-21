@@ -7,6 +7,7 @@ import {
     consciousnessStreams,
     Log,
     logs,
+    cache,
 } from "./schema";
 import {
     Tweet,
@@ -14,8 +15,9 @@ import {
     AgentSetting,
     StreamSetting,
     ConsciousnessStream,
+    Cache,
 } from "./schema";
-import { eq, and, or, lte, desc, inArray } from "drizzle-orm";
+import { eq, and, or, lte, desc, inArray, gte } from "drizzle-orm";
 import { elizaLogger, stringToUuid } from "@ai16z/eliza";
 import { v4 as uuidv4 } from "uuid";
 
@@ -236,6 +238,7 @@ export const promptQueries = {
                 agentId: settings.agentId,
                 version: settings.version,
                 enabled: settings.enabled,
+                type: settings.type,
             };
             const result: AgentPrompt[] = await db
                 .insert(agentPrompts)
@@ -250,16 +253,16 @@ export const promptQueries = {
 
     getPrompt: async (
         agentId: string,
-        version: string
+        type: string
     ): Promise<AgentPrompt | null> => {
         try {
-            const result: AgentPrompt[] = await db
+            const result: AgentPrompt[] | undefined = await db
                 .select()
                 .from(agentPrompts)
                 .where(
                     and(
                         eq(agentPrompts.agentId, agentId),
-                        eq(agentPrompts.version, version),
+                        eq(agentPrompts.type, type),
                         eq(agentPrompts.enabled, true)
                     )
                 )
@@ -288,6 +291,32 @@ export const promptQueries = {
             return result[0];
         } catch (error) {
             elizaLogger.error("Error updating prompt:", error);
+            throw error;
+        }
+    },
+
+    getPrompts: async (): Promise<AgentPrompt[]> => {
+        return await db.select().from(agentPrompts);
+    },
+
+    createPrompt: async (settings: AgentPrompt): Promise<AgentPrompt> => {
+        try {
+            const result: AgentPrompt[] = await db
+                .insert(agentPrompts)
+                .values(settings)
+                .returning();
+            return result[0];
+        } catch (error) {
+            elizaLogger.error("Error creating prompt:", error);
+            throw error;
+        }
+    },
+
+    deletePrompt: async (id: string): Promise<void> => {
+        try {
+            await db.delete(agentPrompts).where(eq(agentPrompts.id, id));
+        } catch (error) {
+            elizaLogger.error("Error deleting prompt:", error);
             throw error;
         }
     },
@@ -403,5 +432,35 @@ export const logQueries = {
             roomId: `prompt_log_${promptType}`,
         };
         await db.insert(logs).values(log);
+    },
+};
+
+export const cacheQueries = {
+    get: async (key: string) => {
+        const result: Cache[] = await db
+            .select()
+            .from(cache)
+            .where(and(eq(cache.key, key), gte(cache.expiresAt, new Date())))
+            .orderBy(desc(cache.createdAt))
+            .limit(1);
+        return result;
+    },
+    set: async (key: string, value: string) => {
+        const c: Cache = {
+            key,
+            value,
+            createdAt: new Date(),
+            expiresAt: new Date(Date.now() + 1000 * 60 * 60), // 1
+            agentId: "davinci",
+        };
+        // check if the cache already exists
+        const existingCache = await cacheQueries.get(key);
+        if (existingCache && existingCache.length > 0) {
+            await cacheQueries.delete(key);
+        }
+        await db.insert(cache).values(c);
+    },
+    delete: async (key: string) => {
+        await db.delete(cache).where(eq(cache.key, key));
     },
 };

@@ -28,19 +28,13 @@ export const agentSettings = pgTable("agent_settings", {
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 
-export const cache = pgTable(
-    "cache",
-    {
-        key: text("key").notNull(),
-        agentId: text("agent_id").notNull(),
-        value: jsonb("value").default({}),
-        createdAt: timestamp("created_at").defaultNow(),
-        expiresAt: timestamp("expires_at"),
-    },
-    (table) => ({
-        primaryKey: [table.key, table.agentId],
-    })
-);
+export const cache = pgTable("cache", {
+    key: text("key").notNull(),
+    agentId: text("agentId").notNull(),
+    value: jsonb("value").default({}),
+    createdAt: timestamp("createdAt").defaultNow(),
+    expiresAt: timestamp("expiresAt"),
+});
 
 export const consciousnessStreams = pgTable("consciousness_streams", {
     id: uuid("id").primaryKey().defaultRandom(),
@@ -69,7 +63,7 @@ export const logs = pgTable("logs", {
     userId: uuid("user_id")
         .notNull()
         .references(() => accounts.id),
-    body: jsonb("body").notNull(),
+    body: jsonb("body").notNull().default({}),
     type: text("type").notNull(),
     roomId: uuid("room_id"),
 });
@@ -145,6 +139,7 @@ export const agentPrompts = pgTable("agent_prompts", {
     agentId: text("agent_id").notNull(),
     version: text("version").notNull(),
     enabled: boolean("enabled").notNull().default(true),
+    type: text("type").notNull().default("text"),
 });
 
 export type Tweet = InferSelectModel<typeof tweets>;

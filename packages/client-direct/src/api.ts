@@ -14,17 +14,21 @@ import {
     ModelClass,
     stringToUuid,
     messageCompletionFooter,
+    validateCharacterConfig,
 } from "@ai16z/eliza";
 import { REST, Routes } from "discord.js";
 import { eq, desc } from "drizzle-orm";
 import {
     consciousnessStreams,
     authMiddleware,
+    generateStream,
 } from "../../redux-extensions/src/index";
+import { generateTrendingConnections } from "../../redux-extensions/src/engine/trending-searches";
 import { db } from "../../redux-extensions/src/index";
 import {
     tweetQueries,
     streamQueries,
+    promptQueries,
 } from "../../redux-extensions/src/db/queries";
 
 import * as fs from "fs";
@@ -32,13 +36,20 @@ import * as path from "path";
 
 const upload = multer({ storage: multer.memoryStorage() });
 
-export function createApiRouter(agents: Map<string, AgentRuntime>) {
+export function createApiRouter(
+    agents: Map<string, AgentRuntime>,
+    directClient
+) {
     const router = express.Router();
 
     router.use(cors());
     router.use(bodyParser.json());
     router.use(bodyParser.urlencoded({ extended: true }));
     router.use(authMiddleware as any); // authenticate all requests
+
+    router.get("/", (req, res) => {
+        res.send("Welcome, this is the REST API!");
+    });
 
     router.get("/hello", (req, res) => {
         res.json({ message: "Hello World!" });
@@ -48,6 +59,7 @@ export function createApiRouter(agents: Map<string, AgentRuntime>) {
         const agentsList = Array.from(agents.values()).map((agent) => ({
             id: agent.agentId,
             name: agent.character.name,
+            clients: Object.keys(agent.clients),
         }));
         res.json({ agents: agentsList });
     });
@@ -64,6 +76,42 @@ export function createApiRouter(agents: Map<string, AgentRuntime>) {
         res.json({
             id: agent.agentId,
             character: agent.character,
+        });
+    });
+
+    router.post("/agents/:agentId/set", async (req, res) => {
+        const agentId = req.params.agentId;
+        console.log("agentId", agentId);
+        let agent: AgentRuntime = agents.get(agentId);
+
+        // update character
+        if (agent) {
+            // stop agent
+            agent.stop();
+            directClient.unregisterAgent(agent);
+            // if it has a different name, the agentId will change
+        }
+
+        // load character from body
+        const character = req.body;
+        try {
+            validateCharacterConfig(character);
+        } catch (e) {
+            elizaLogger.error(`Error parsing character: ${e}`);
+            res.status(400).json({
+                success: false,
+                message: e.message,
+            });
+            return;
+        }
+
+        // start it up (and register it)
+        agent = await directClient.startAgent(character);
+        elizaLogger.log(`${character.name} started`);
+
+        res.json({
+            id: character.id,
+            character: character,
         });
     });
 
@@ -409,6 +457,66 @@ export function createApiRouter(agents: Map<string, AgentRuntime>) {
         const offset = parseInt(req.query.offset as string) || 0;
         const tweets = await tweetQueries.getTweets(limit, offset);
         res.json(tweets);
+    });
+
+    // prompts
+    router.get("/prompts", async (req, res) => {
+        const prompts = await promptQueries.getPrompts();
+        res.json(prompts);
+    });
+
+    router.post("/prompts/:id", async (req, res) => {
+        const id = req.params.id;
+        const settings = req.body;
+        const prompt = await promptQueries.updatePrompt(id, settings);
+        res.json(prompt);
+    });
+
+    router.post("/prompts", async (req, res) => {
+        const settings = req.body;
+        const prompt = await promptQueries.createPrompt(settings);
+        res.json(prompt);
+    });
+
+    router.delete("/prompts/:id", async (req, res) => {
+        const id = req.params.id;
+        await promptQueries.deletePrompt(id);
+        res.json({ message: "Prompt deleted" });
+    });
+
+    // trending searches endpoint
+    router.get("/trending-searches", async (req, res) => {
+        const connections = await generateTrendingConnections();
+        res.json(connections);
+    });
+
+    // Add this to the router in createApiRouter function
+    router.post("/:agentId/generateStream", async (req, res) => {
+        const agentId = req.params.agentId;
+        const { topic } = req.body;
+
+        if (!topic) {
+            res.status(400).json({ error: "Topic is required" });
+            return;
+        }
+
+        const runtime = agents.get(agentId);
+        if (!runtime) {
+            res.status(404).json({ error: "Agent not found" });
+            return;
+        }
+
+        try {
+            const stream = await generateStream(runtime, topic);
+            if (!stream) {
+                res.status(500).json({ error: "Failed to generate stream" });
+                return;
+            }
+            res.json(stream);
+        } catch (error) {
+            elizaLogger.error("Error generating stream:", error);
+            res.status(500).json({ error: "Failed to generate stream" });
+        }
     });
 
     return router;
